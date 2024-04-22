@@ -10,7 +10,7 @@ from nicegui import Client, app, ui
 passwords = {'user1': 'pass1', 'user2': 'pass2'}
 
 # Setting up SQL connector
-sql_connector = sqlite3.connect("ICON-users.db")
+sql_connector = sqlite3.connect("nice_gui_db.db")
 # Creating the Cursor for the SQL db
 cursor_obj = sql_connector.cursor()
 
