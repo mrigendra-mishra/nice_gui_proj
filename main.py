@@ -1,5 +1,5 @@
 from typing import Optional
-
+import sqlite3
 from fastapi import Request
 from fastapi.responses import RedirectResponse
 from starlette.middleware.base import BaseHTTPMiddleware
@@ -8,6 +8,11 @@ from nicegui import Client, app, ui
 
 # in reality users passwords would obviously need to be hashed
 passwords = {'user1': 'pass1', 'user2': 'pass2'}
+
+# Setting up SQL connector
+sql_connector = sqlite3.connect("ICON-users.db")
+# Creating the Cursor for the SQL db
+cursor_obj = sql_connector.cursor()
 
 unrestricted_page_routes = {'/login'}
 
@@ -50,8 +55,15 @@ def test_page() -> None:
 @ui.page('/login')
 def login() -> Optional[RedirectResponse]:
     def try_login() -> None:  # local function to avoid passing username and password as arguments
-        if passwords.get(username.value) == password.value:
-            app.storage.user.update({'username': username.value, 'authenticated': True})
+        my_query = f"""SELECT * FROM user_creds uc WHERE uc.username = '{username.value}' and uc.password = '{password.value}'"""
+        cursor_obj.execute(my_query)
+        results = cursor_obj.fetchall()
+        sql_connector.commit()
+        sql_connector.close()
+        if len(results) != 0:
+            app.storage.user.update({'username': username.value, 'user_uid': results[0][2], 'authenticated': True})
+            ui.notify(app.storage.user.get('user_uid'), color='negative')
+            print(app.storage.user.get('user_uid'))
             ui.navigate.to(app.storage.user.get('referrer_path', '/'))  # go back to where the user wanted to go
         else:
             ui.notify('Wrong username or password', color='negative')
