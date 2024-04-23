@@ -13,10 +13,7 @@ from fastapi.responses import RedirectResponse
 from starlette.middleware.base import BaseHTTPMiddleware
 from nicegui import Client, app, ui
 
-
-
 unrestricted_page_routes = {'/login', '/signup'}
-
 
 class AuthMiddleware(BaseHTTPMiddleware):
     """This middleware restricts access to all NiceGUI pages.
