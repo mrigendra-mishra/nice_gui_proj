@@ -3,18 +3,12 @@ import sqlite3
 from fastapi import Request
 from fastapi.responses import RedirectResponse
 from starlette.middleware.base import BaseHTTPMiddleware
-
+from uuid import uuid4 as uuid
 from nicegui import Client, app, ui
+import time
 
-# in reality users passwords would obviously need to be hashed
-passwords = {'user1': 'pass1', 'user2': 'pass2'}
 
-# Setting up SQL connector
-sql_connector = sqlite3.connect("nice_gui_db.db")
-# Creating the Cursor for the SQL db
-cursor_obj = sql_connector.cursor()
-
-unrestricted_page_routes = {'/login'}
+unrestricted_page_routes = {'/login', '/signup'}
 
 
 class AuthMiddleware(BaseHTTPMiddleware):
@@ -51,10 +45,44 @@ def test_page() -> None:
             .props('outline round')
 
 
+@ui.page('/signup')
+def signup() -> Optional[RedirectResponse]:
+
+    def try_signup():
+        user_uid = str(uuid())
+        # Setting up SQL connector
+        sql_connector = sqlite3.connect("nice_gui_db.db")
+        # Creating the Cursor for the SQL db
+        cursor_obj = sql_connector.cursor()
+        my_query = f"""INSERT INTO user_creds (first_name, last_name, username, password, user_uid) VALUES 
+                    ('{first_name.value}','{last_name.value}','{username.value}','{password.value}','{user_uid}')"""
+        cursor_obj.execute(my_query)
+        sql_connector.commit()
+        sql_connector.close()
+        ui.notify('Welcome!!', color='negative')
+        time.sleep(5)
+        ui.navigate.to('/login')
+
+    with ui.card().classes('absolute-center'):
+        first_name = ui.input('First Name', validation={'Not a valid name': lambda value: value.isalpha()})
+        last_name = ui.input('Last Name', validation={'Not a valid name': lambda value: value.isalpha()})
+        username = ui.input('Username').on('keydown.enter', try_signup)
+        password = ui.input('Password', password=True, password_toggle_button=True,
+                            validation= {'Too short': lambda value: len(value) >= 6}
+                            ).on('keydown.enter', try_signup)
+        ui.button('Sign up', on_click=try_signup)
+        ui.button('Login', on_click=lambda: ui.navigate.to('/login'))
+    return None
+
 
 @ui.page('/login')
 def login() -> Optional[RedirectResponse]:
+
     def try_login() -> None:  # local function to avoid passing username and password as arguments
+        # Setting up SQL connector
+        sql_connector = sqlite3.connect("nice_gui_db.db")
+        # Creating the Cursor for the SQL db
+        cursor_obj = sql_connector.cursor()
         my_query = f"""SELECT * FROM user_creds uc WHERE uc.username = '{username.value}' and uc.password = '{password.value}'"""
         cursor_obj.execute(my_query)
         results = cursor_obj.fetchall()
@@ -74,6 +102,9 @@ def login() -> Optional[RedirectResponse]:
         username = ui.input('Username').on('keydown.enter', try_login)
         password = ui.input('Password', password=True, password_toggle_button=True).on('keydown.enter', try_login)
         ui.button('Log in', on_click=try_login)
+        # ui.button('Sign up', on_click=goto_signup)
+        ui.button('Sign up', on_click=lambda: ui.navigate.to('/signup'))
     return None
+
 
 ui.run(storage_secret='My_nice_gui_@_1312_1993')
