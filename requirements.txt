@@ -1,3 +1,4 @@
 nicegui
 fastapi
 starlette
+pylint
