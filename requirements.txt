@@ -2,3 +2,8 @@ nicegui
 fastapi
 starlette
 pylint
+langchain>=0.0.142
+langchain_openai
+nicegui
+google-generativeai
+langchain_google_genai

@@ -1,22 +1,30 @@
 """
-This initalizes an app using Nice GUI.
+This initializes an app using Nice GUI.
 
 The app leveraging power of LLM for knowledge sharing
 """
 # pylint: disable=R0903
-from typing import Optional
+from typing import Optional, List, Tuple
 import sqlite3
 import time
 from uuid import uuid4 as uuid
 from fastapi import Request
 from fastapi.responses import RedirectResponse
 from starlette.middleware.base import BaseHTTPMiddleware
+import google.generativeai as gen_ai
+from langchain_google_genai import ChatGoogleGenerativeAI, HarmBlockThreshold, HarmCategory
 from nicegui import Client, app, ui
 
 unrestricted_page_routes = {'/login', '/signup'}
+messages: List[Tuple[str, str, str, str]] = []
+OPENAI_API_KEY = 'set'
+GOOGLE_API_KEY = 'AIzaSyCTau5yZsRdCGO8UtjD3bl00IDvR6j6z8M'
+gen_ai.configure(api_key=GOOGLE_API_KEY)
+
 
 class AuthMiddleware(BaseHTTPMiddleware):
-    """This middleware restricts access to all NiceGUI pages.
+    """
+    This middleware restricts access to all NiceGUI pages.
 
     It redirects the user to the login page if they are not authenticated.
     """
@@ -34,16 +42,69 @@ class AuthMiddleware(BaseHTTPMiddleware):
 app.add_middleware(AuthMiddleware)
 
 
+@ui.refreshable
+def chat_messages(own_id: str) -> None:
+    for user_id, avatar, text, stamp in messages:
+        ui.chat_message(text=text, stamp=stamp, avatar=avatar, sent=own_id == user_id)
+    ui.run_javascript('window.scrollTo(0, document.body.scrollHeight)')
+
+
 @ui.page('/')
 def main_page() -> None:
     """
     This defines the Homepage of the app
     """
-    with ui.column().classes('absolute-center items-center'):
-        ui.label(f'Hello {app.storage.user["username"]}!').classes('text-2xl')
-        ui.button(on_click=lambda: ui.navigate.to('/subpage'), icon='logout')
+    llm = ChatGoogleGenerativeAI(model="gemini-pro", streaming=True, safety_settings={
+        HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT: HarmBlockThreshold.BLOCK_NONE,
+    }, temperature=0, google_api_key=GOOGLE_API_KEY)
+
+    ui.page_title('Home | JARVIS')
+    ui.label(f'Hello {app.storage.user["first_name"]}!').classes('text-2xl')
+    # ui.button(on_click=lambda: ui.navigate.to('/subpage'), icon='logout')
+    with ui.card().classes('absolute-right'):
         ui.button(on_click=lambda: (app.storage.user.clear(), ui.navigate.to('/login')),
                   icon='logout').props('outline round')
+
+    async def send() -> None:
+        question = text.value
+        text.value = ''
+
+        with message_container:
+            ui.chat_message(text=question, name='You', sent=True)
+            response_message = ui.chat_message(name='Bot', sent=False)
+            spinner = ui.spinner(type='dots')
+
+        response = ''
+        async for chunk in llm.astream(question):
+            response += chunk.content
+            response_message.clear()
+            with response_message:
+                ui.html(response)
+            ui.run_javascript('window.scrollTo(0, document.body.scrollHeight)')
+        message_container.remove(spinner)
+
+    ui.add_css(r'a:link, a:visited {color: inherit !important; text-decoration: none; font-weight: 500}')
+
+    # the queries below are used to expand the contend down to the footer (content can then use flex-grow to expand)
+    ui.query('.q-page').classes('flex')
+    ui.query('.nicegui-content').classes('w-full')
+
+    with ui.tabs().classes('w-full') as tabs:
+        chat_tab = ui.tab('Chat')
+        # logs_tab = ui.tab('Logs')
+    with ui.tab_panels(tabs, value=chat_tab).classes('w-full max-w-2xl mx-auto flex-grow items-stretch'):
+        message_container = ui.tab_panel(chat_tab).classes('items-stretch')
+        # with ui.tab_panel(logs_tab):
+        #     log = ui.log().classes('w-full h-full')
+
+    with ui.footer().classes('bg-white'), ui.column().classes('w-full max-w-3xl mx-auto my-6'):
+        with ui.row().classes('w-full no-wrap items-center'):
+            placeholder = 'message' if OPENAI_API_KEY != 'not-set' else \
+                'Please provide your OPENAI key in the Python script first!'
+            text = ui.input(placeholder=placeholder).props('rounded outlined input-class=mx-3') \
+                .classes('w-full self-center').on('keydown.enter', send)
+        ui.markdown('Pwered by [NiceGUI](https://nicegui.io)') \
+            .classes('text-xs self-end mr-8 m-[-1em] text-primary')
 
 
 @ui.page('/subpage')
@@ -62,6 +123,7 @@ def signup() -> Optional[RedirectResponse]:
     """
     This page is for new signups
     """
+
     def try_signup():
         user_uid = str(uuid())
         # Setting up SQL connector
@@ -91,7 +153,7 @@ def signup() -> Optional[RedirectResponse]:
         username = ui.input('Username').on('keydown.enter', try_signup)
         password = ui.input('Password', password=True,
                             password_toggle_button=True,
-                            validation= {
+                            validation={
                                 'Too short': lambda value: len(value) >= 6
                             }
                             ).on('keydown.enter', try_signup)
@@ -104,12 +166,15 @@ def login() -> Optional[RedirectResponse]:
     """
     This page is for logging in to the application. This is an unrestricted page.
     """
+
     def try_login() -> None:  # local function to avoid passing username and password as arguments
         # Setting up SQL connector
         sql_connector = sqlite3.connect("nice_gui_db.db")
         # Creating the Cursor for the SQL db
         cursor_obj = sql_connector.cursor()
-        my_query = f"""SELECT * FROM user_creds uc
+        my_query = f"""SELECT first_name, last_name, username,
+                              password, user_uid
+                    FROM user_creds uc
                     WHERE uc.username = '{username.value}' and 
                     uc.password = '{password.value}'"""
         cursor_obj.execute(my_query)
@@ -119,7 +184,9 @@ def login() -> Optional[RedirectResponse]:
         if len(results) != 0:
             app.storage.user.update({
                 'username': username.value,
-                'user_uid': results[0][2],
+                'first_name': results[0][0],
+                'last_name': results[0][1],
+                'user_uid': results[0][4],
                 'authenticated': True
             })
             ui.notify(app.storage.user.get('user_uid'), color='negative')
