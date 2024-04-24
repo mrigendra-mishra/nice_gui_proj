@@ -44,6 +44,7 @@ app.add_middleware(AuthMiddleware)
 
 @ui.refreshable
 def chat_messages(own_id: str) -> None:
+    """CHat message definition"""
     for user_id, avatar, text, stamp in messages:
         ui.chat_message(text=text, stamp=stamp, avatar=avatar, sent=own_id == user_id)
     ui.run_javascript('window.scrollTo(0, document.body.scrollHeight)')
@@ -83,16 +84,21 @@ def main_page() -> None:
             ui.run_javascript('window.scrollTo(0, document.body.scrollHeight)')
         message_container.remove(spinner)
 
-    ui.add_css(r'a:link, a:visited {color: inherit !important; text-decoration: none; font-weight: 500}')
+    ui.add_css(r'a:link, a:visited {color: inherit !important;'
+               r'text-decoration: none; font-weight: 500}')
 
-    # the queries below are used to expand the contend down to the footer (content can then use flex-grow to expand)
+    # the queries below are used to expand the contend down to \
+    # the footer (content can then use flex-grow to expand)
     ui.query('.q-page').classes('flex')
     ui.query('.nicegui-content').classes('w-full')
 
     with ui.tabs().classes('w-full') as tabs:
         chat_tab = ui.tab('Chat')
         # logs_tab = ui.tab('Logs')
-    with ui.tab_panels(tabs, value=chat_tab).classes('w-full max-w-2xl mx-auto flex-grow items-stretch'):
+    with ui.tab_panels(
+            tabs,
+            value=chat_tab
+    ).classes('w-full max-w-2xl mx-auto flex-grow items-stretch'):
         message_container = ui.tab_panel(chat_tab).classes('items-stretch')
         # with ui.tab_panel(logs_tab):
         #     log = ui.log().classes('w-full h-full')
@@ -175,7 +181,7 @@ def login() -> Optional[RedirectResponse]:
         my_query = f"""SELECT first_name, last_name, username,
                               password, user_uid
                     FROM user_creds uc
-                    WHERE uc.username = '{username.value}' and 
+                    WHERE uc.username = '{username.value}' and
                     uc.password = '{password.value}'"""
         cursor_obj.execute(my_query)
         results = cursor_obj.fetchall()
